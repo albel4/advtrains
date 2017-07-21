@@ -170,11 +170,18 @@ function advtrains.minAngleDiffRad(r1, r2)
 		return try3
 	end
 end
+
 function advtrains.dumppath(path)
-	if not path then atprint("dumppath: no path(nil)") return end
-	local min=advtrains.minN(path)
-	local max=advtrains.maxN(path)
-	for i=min, max do atprint("["..i.."] "..(path[i] and minetest.pos_to_string(path[i]) or "nil")) end
+	atlog("Dumping a path:")
+	if not path then atlog("dumppath: no path(nil)") return end
+	local temp_path={}
+	for ipt, iit in pairs(path) do 
+		temp_path[#temp_path+1]={i=ipt, p=iit}
+	end
+	table.sort(temp_path, function (k1, k2) return k1.i < k2.i end)
+	for _,pit in ipairs(temp_path) do
+		atlog(pit.i.." > "..minetest.pos_to_string(pit.p))
+	end
 end
 
 function advtrains.merge_tables(a, ...)
@@ -242,3 +249,14 @@ function advtrains.deserialize_inventory(sers, inv)
 	return false
 end
 
+--is_protected wrapper that checks for protection_bypass privilege
+function advtrains.is_protected(pos, name)
+	if not name then
+		error("advtrains.is_protected() called without name parameter!")
+	end
+	if minetest.check_player_privs(name, {protection_bypass=true}) then
+		--player can bypass protection
+		return false
+	end
+	return minetest.is_protected(pos, name)
+end

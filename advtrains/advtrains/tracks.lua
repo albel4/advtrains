@@ -37,7 +37,7 @@ advtrains.all_tracktypes={}
 local function conns(c1, c2, r1, r2, rh, rots) return {conn1=c1, conn2=c2, rely1=r1, rely2=r2, railheight=rh} end
 
 local ap={}
-ap.t_30deg={
+ap.t_30deg_flat={
 	regstep=1,
 	variant={
 		st=conns(0,8),
@@ -46,11 +46,6 @@ ap.t_30deg={
 		swlcr=conns(0,7),
 		swrst=conns(0,8),
 		swrcr=conns(0,9),
-		vst1=conns(8,0,0,0.5,0.25),
-		vst2=conns(8,0,0.5,1,0.75),
-		vst31=conns(8,0,0,0.33,0.16),
-		vst32=conns(8,0,0.33,0.66,0.5),
-		vst33=conns(8,0,0.66,1,0.83),
 	},
 	description={
 		st="straight",
@@ -59,11 +54,6 @@ ap.t_30deg={
 		swlcr="left switch (curve)",
 		swrst="right switch (straight)",
 		swrcr="right switch (curve)",
-		vst1="steep uphill 1/2",
-		vst2="steep uphill 2/2",
-		vst31="uphill 1/3",
-		vst32="uphill 2/3",
-		vst33="uphill 3/3",
 	},
 	switch={
 		swlst="swlcr",
@@ -100,6 +90,29 @@ ap.t_30deg={
 		["swlcr"]="swrcr",
 		["swlst"]="swrst",
 	},
+	rotation={"", "_30", "_45", "_60"},
+	slopenodes={},
+	increativeinv={},
+}
+ap.t_30deg_slope={
+	regstep=1,
+	variant={
+		vst1=conns(8,0,0,0.5,0.25),
+		vst2=conns(8,0,0.5,1,0.75),
+		vst31=conns(8,0,0,0.33,0.16),
+		vst32=conns(8,0,0.33,0.66,0.5),
+		vst33=conns(8,0,0.66,1,0.83),
+	},
+	description={
+		vst1="steep uphill 1/2",
+		vst2="steep uphill 2/2",
+		vst31="uphill 1/3",
+		vst32="uphill 2/3",
+		vst33="uphill 3/3",
+	},
+	switch={},
+	switchmc={},
+	switchst={},
 	regsp=true,
 	slopenodes={
 		vst1=true, vst2=true,
@@ -115,6 +128,7 @@ ap.t_30deg={
 		max=2,
 	},
 	rotation={"", "_30", "_45", "_60"},
+	trackworker={},
 	increativeinv={},
 }
 ap.t_30deg_straightonly={
@@ -140,7 +154,7 @@ ap.t_30deg_straightonly={
 	},
 	slopenodes={},
 	rotation={"", "_30", "_45", "_60"},
-	increativeinv={st},
+	increativeinv={"st"},
 }
 ap.t_30deg_straightonly_noplacer={
 	regstep=1,
@@ -165,7 +179,7 @@ ap.t_30deg_straightonly_noplacer={
 	},
 	slopenodes={},
 	rotation={"", "_30", "_45", "_60"},
-	increativeinv={st},
+	increativeinv={"st"},
 }
 ap.t_45deg={
 	regstep=2,
@@ -246,11 +260,17 @@ advtrains.trackpresets = ap
 }]]
 function advtrains.register_tracks(tracktype, def, preset)
 	local function make_switchfunc(suffix_target, mesecon_state, is_state)
+		local rcswitchfunc=function(pos, node, player)
+			if minetest.check_player_privs(player:get_player_name(), {train_operator=true}) then
+				advtrains.ndb.swap_node(pos, {name=def.nodename_prefix.."_"..suffix_target, param2=node.param2})
+				advtrains.invalidate_all_paths(pos)
+			end
+		end
 		local switchfunc=function(pos, node, newstate)
 			if newstate~=is_state then
 				advtrains.ndb.swap_node(pos, {name=def.nodename_prefix.."_"..suffix_target, param2=node.param2})
+				advtrains.invalidate_all_paths(pos)
 			end
-			advtrains.invalidate_all_paths()
 		end
 		local mesec
 		if mesecon_state then -- if mesecons is not wanted, do not.
@@ -259,17 +279,17 @@ function advtrains.register_tracks(tracktype, def, preset)
 				rules=advtrains.meseconrules
 			}}
 		end
-		return switchfunc, mesec,
+		return rcswitchfunc, mesec,
 		{ 
 			getstate = is_state,
 			setstate = switchfunc,
 		}
 	end
-	local function make_overdef(suffix, rotation, conns, switchfunc, mesecontbl, luaautomation, in_creative_inv, drop_slope)
+	local function make_overdef(suffix, rotation, conns, rcswitchfunc, mesecontbl, luaautomation, in_creative_inv, drop_slope)
 		local img_suffix=suffix..rotation
 		return {
 			mesh = def.shared_model or (def.models_prefix.."_"..img_suffix..def.models_suffix),
-			tiles = {def.shared_texture or (def.texture_prefix.."_"..img_suffix..".png")},
+			tiles = {def.shared_texture or (def.texture_prefix.."_"..img_suffix..".png"), def.second_texture},
 			--inventory_image = def.texture_prefix.."_"..img_suffix..".png",
 			--wield_image = def.texture_prefix.."_"..img_suffix..".png",
 			description=def.description.."("..preset.description[suffix]..rotation..")",
@@ -279,7 +299,7 @@ function advtrains.register_tracks(tracktype, def, preset)
 			rely2=conns.rely2 or 0,
 			railheight=conns.railheight or 0,
 			
-			on_rightclick=switchfunc,
+			on_rightclick=rcswitchfunc,
 			groups = {
 				attached_node=1,
 				["advtrains_track_"..tracktype]=1,
@@ -290,7 +310,7 @@ function advtrains.register_tracks(tracktype, def, preset)
 			},
 			mesecons=mesecontbl,
 			luaautomation=luaautomation,
-			drop = increativeinv and def.nodename_prefix.."_"..suffix..rotation or (drop_slope and def.nodename_prefix.."_slopeplacer" or def.nodename_prefix.."_placer"),
+			drop = (drop_slope and def.nodename_prefix.."_slopeplacer" or def.nodename_prefix.."_placer"),
 			}
 	end
 	local function cycle_conns(conns, rotid)
@@ -338,9 +358,9 @@ function advtrains.register_tracks(tracktype, def, preset)
 	for suffix, conns in pairs(preset.variant) do
 		for rotid, rotation in ipairs(preset.rotation) do
 			if not def.formats[suffix] or def.formats[suffix][rotid] then
-				local switchfunc, mesecontbl, luaautomation
+				local rcswitchfunc, mesecontbl, luaautomation
 				if preset.switch[suffix] then
-					switchfunc, mesecontbl, luaautomation=make_switchfunc(preset.switch[suffix]..rotation, preset.switchmc[suffix], preset.switchst[suffix])
+					rcswitchfunc, mesecontbl, luaautomation=make_switchfunc(preset.switch[suffix]..rotation, preset.switchmc[suffix], preset.switchst[suffix])
 				end
 				local adef={}
 				if def.get_additional_definiton then
@@ -352,7 +372,7 @@ function advtrains.register_tracks(tracktype, def, preset)
 					make_overdef(
 						suffix, rotation,
 						cycle_conns(conns, rotid),
-						switchfunc, mesecontbl, luaautomation, preset.increativeinv[suffix], preset.slopenodes[suffix]
+						rcswitchfunc, mesecontbl, luaautomation, preset.increativeinv[suffix], preset.slopenodes[suffix]
 						),
 					adef
 					)
@@ -476,8 +496,8 @@ function sl.create_slopeplacer_on_place(def, preset)
 			minetest.chat_send_player(player:get_player_name(), attrans("Can't place: space occupied!"))
 			return istack
 		end
-		if minetest.is_protected(pos, player:get_player_name()) then 
-			minetest.chat_send_player(player:get_player_name(), attrans("Can't place: protected position!"))
+		if advtrains.is_protected(pos, player:get_player_name()) then 
+			minetest.record_protection_violation(pos, player:get_player_name())
 			return istack
 		end
 		--determine player orientation (only horizontal component)
@@ -511,15 +531,15 @@ function sl.create_slopeplacer_on_place(def, preset)
 		while step<=lookup.max do
 			local node=minetest.get_node(vector.add(pos, dirvec))
 			--next node solid?
-			if not minetest.registered_nodes[node.name] or not minetest.registered_nodes[node.name].buildable_to or minetest.is_protected(pos, player:get_player_name()) then 
+			if not minetest.registered_nodes[node.name] or not minetest.registered_nodes[node.name].buildable_to or advtrains.is_protected(pos, player:get_player_name()) then 
 				--do slopes of this distance exist?
 				if lookup[step] then
-					if minetest.setting_getbool("creative_mode") or istack:get_count()>=step then
+					if minetest.settings:get_bool("creative_mode") or istack:get_count()>=step then
 						--start placing
 						local placenodes=lookup[step]
 						while step>0 do
 							minetest.set_node(pos, {name=def.nodename_prefix.."_"..placenodes[step], param2=param2})
-							if not minetest.setting_getbool("creative_mode") then
+							if not minetest.settings:get_bool("creative_mode") then
 								istack:take_item()
 							end
 							step=step-1
@@ -567,16 +587,27 @@ advtrains.register_tracks("regular", {
 	formats={vst1={}, vst2={}},
 }, ap.t_45deg)
 
-
+--flat
 advtrains.register_tracks("default", {
 	nodename_prefix="advtrains:dtrack",
 	texture_prefix="advtrains_dtrack",
 	models_prefix="advtrains_dtrack",
 	models_suffix=".b3d",
-	shared_texture="advtrains_dtrack_rail.png",
+	shared_texture="advtrains_dtrack_shared.png",
+	description=attrans("Track"),
+	formats={},
+}, ap.t_30deg_flat)
+--slopes
+advtrains.register_tracks("default", {
+	nodename_prefix="advtrains:dtrack",
+	texture_prefix="advtrains_dtrack",
+	models_prefix="advtrains_dtrack",
+	models_suffix=".obj",
+	shared_texture="advtrains_dtrack_shared.png",
+	second_texture="default_gravel.png",
 	description=attrans("Track"),
 	formats={vst1={true, false, true}, vst2={true, false, true}, vst31={true}, vst32={true}, vst33={true}},
-}, ap.t_30deg)
+}, ap.t_30deg_slope)
 
 --bumpers
 advtrains.register_tracks("default", {
@@ -585,6 +616,7 @@ advtrains.register_tracks("default", {
 	models_prefix="advtrains_dtrack_bumper",
 	models_suffix=".b3d",
 	shared_texture="advtrains_dtrack_rail.png",
+	--bumpers still use the old texture until the models are redone.
 	description=attrans("Bumper"),
 	formats={},
 }, ap.t_30deg_straightonly)
@@ -597,9 +629,9 @@ if mesecon then
 	advtrains.register_tracks("default", {
 		nodename_prefix="advtrains:dtrack_detector_off",
 		texture_prefix="advtrains_dtrack_detector",
-		models_prefix="advtrains_dtrack_detector",
+		models_prefix="advtrains_dtrack",
 		models_suffix=".b3d",
-		shared_texture="advtrains_dtrack_rail.png",
+		shared_texture="advtrains_dtrack_shared_detector_off.png",
 		description=attrans("Detector Rail"),
 		formats={},
 		get_additional_definiton = function(def, preset, suffix, rotation)
@@ -612,7 +644,7 @@ if mesecon then
 				},
 				advtrains = {
 					on_train_enter=function(pos, train_id)
-						advtrains.ndb.swap_node(pos, {name="advtrains:dtrack_detector_on".."_"..suffix..rotation, param2=minetest.get_node(pos).param2})
+						advtrains.ndb.swap_node(pos, {name="advtrains:dtrack_detector_on".."_"..suffix..rotation, param2=advtrains.ndb.get_node(pos).param2})
 						mesecon.receptor_on(pos, advtrains.meseconrules)
 					end
 				}
@@ -621,10 +653,10 @@ if mesecon then
 	}, ap.t_30deg_straightonly)
 	advtrains.register_tracks("default", {
 		nodename_prefix="advtrains:dtrack_detector_on",
-		texture_prefix="advtrains_dtrack_detector",
-		models_prefix="advtrains_dtrack_detector",
+		texture_prefix="advtrains_dtrack",
+		models_prefix="advtrains_dtrack",
 		models_suffix=".b3d",
-		shared_texture="advtrains_dtrack_rail_detector_on.png",
+		shared_texture="advtrains_dtrack_shared_detector_on.png",
 		description="Detector(on)(you hacker you)",
 		formats={},
 		get_additional_definiton = function(def, preset, suffix, rotation)
@@ -637,7 +669,7 @@ if mesecon then
 				},
 				advtrains = {
 					on_train_leave=function(pos, train_id)
-						advtrains.ndb.swap_node(pos, {name="advtrains:dtrack_detector_off".."_"..suffix..rotation, param2=minetest.get_node(pos).param2})
+						advtrains.ndb.swap_node(pos, {name="advtrains:dtrack_detector_off".."_"..suffix..rotation, param2=advtrains.ndb.get_node(pos).param2})
 						mesecon.receptor_off(pos, advtrains.meseconrules)
 					end
 				}

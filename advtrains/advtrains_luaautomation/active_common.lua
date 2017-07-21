@@ -49,7 +49,7 @@ function ac.getform(pos, meta_p)
 end
 
 function ac.after_dig_node(pos, node, player)
-	advtrains.invalidate_all_paths()
+	advtrains.invalidate_all_paths(pos)
 	advtrains.ndb.clear(pos)
 	local ph=minetest.pos_to_string(pos)
 	ac.nodes[ph]=nil
@@ -58,6 +58,7 @@ end
 function ac.on_receive_fields(pos, formname, fields, player)
 	if not minetest.check_player_privs(player:get_player_name(), {atlatc=true}) then
 		minetest.chat_send_player(player:get_player_name(), "Missing privilege: atlatc - Operation cancelled!")
+		return
 	end
 	
 	local meta=minetest.get_meta(pos)
